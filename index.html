@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>班表系統-3</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+  <meta name="theme-color" content="#1d4ed8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+</head>
+<body>
+  <div id="login-page" class="login-page">
+    <form id="login-form" class="login-box">
+      <h1>班表系統登入</h1>
+      <input id="employeeId" type="text" placeholder="請輸入員工編號" autocomplete="username" required />
+      <input id="password" type="password" placeholder="密碼（未設定時可輸入員工編號）" autocomplete="current-password" required />
+      <button id="login-btn" type="submit">登入</button>
+      <p class="login-hint">測試登入：GoldBricks / GoldBricks、GB080202 / GB080202</p>
+      <button id="login-clear-cache-btn" type="button" class="text-btn">清除登入快取</button>
+      <p id="login-system-warning" class="warning-text hidden"></p>
+      <p id="login-error" class="error-text"></p>
+    </form>
+  </div>
+
+  <div id="main-page" class="main-page sidebar-collapsed hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">GB</div>
+        <div class="brand-info">
+          <h1>班表系統</h1>
+          <p>Shift System</p>
+        </div>
+      </div>
+
+      <nav class="menu">
+        <button class="menu-btn active" data-page="home">首頁</button>
+        <button class="menu-btn" data-page="announcement">公告欄</button>
+        <button class="menu-btn" data-page="staff">人員資訊</button>
+        <button class="menu-btn" data-page="schedule">休假表</button>
+        <button class="menu-btn" data-page="roster">排程表</button>
+        <button class="menu-btn" data-page="today-staff">當日上班人員</button>
+        <button class="menu-btn" data-page="leave">請假申請</button>
+        <div class="menu-divider" id="menu-permissions-divider" aria-hidden="true">--權限--</div>
+        <button class="menu-btn hidden" id="menu-shift-settings-btn" data-page="shift-settings">班別設定</button>
+        <button class="menu-btn" id="menu-monthly-summary-btn" data-page="monthly-summary">本月統計</button>
+        <button class="menu-btn hidden" id="menu-attendance-btn" data-page="attendance">打卡紀錄</button>
+        <button class="menu-btn hidden" id="menu-coordinate-btn" data-page="coordinates">打卡座標</button>
+      </nav>
+    </aside>
+
+    <section class="main-content">
+      <header class="content-header">
+        <div class="header-left">
+          <button id="sidebar-toggle-btn" class="sidebar-icon-btn" type="button" aria-expanded="false" aria-label="展開選單">☰</button>
+          <div>
+          <h2 id="page-title">首頁</h2>
+          </div>
+        </div>
+        <div class="header-right">
+          <span>目前登入 <strong id="current-user-name"></strong></span>
+          <span id="current-user-time" class="current-user-time hidden"></span>
+          <button id="change-password-btn" class="small-btn icon-only-btn" type="button" aria-label="變更密碼">👤</button>
+          <button id="logout-btn" class="small-btn" type="button">登出</button>
+        </div>
+      </header>
+
+      <section id="page-home" class="page-section">
+        <div class="hero-card">
+          <div>
+            <h3>今日出勤打卡</h3>
+            <p id="today-shift-info">載入班別中...</p>
+          </div>
+          <div class="hero-card-actions">
+            <button id="clock-in-btn" type="button" class="primary-btn">上班打卡</button>
+            <button id="clock-out-btn" type="button" class="secondary-btn">下班打卡</button>
+          </div>
+        </div>
+
+        <div class="content-grid home-grid">
+           <div id="home-today-attendance-card" class="card">
+            <div class="section-header-row">
+              <div>
+                <h3>當日上班人員</h3>
+                <p class="helper-text">僅管理員可查看；點擊姓名可展開浮動視窗查看該員工今日打卡記錄。</p>
+              </div>
+            </div>
+            <div id="today-attendance-staff-list" class="list-wrap"></div>
+          </div>
+          
+           <div class="card attendance-card">
+            <div class="section-header-row">
+              <div>
+                <h3>出勤打卡</h3>
+                <p class="helper-text">系統會自動帶入今日班別；超出範圍可填寫原因後送出，逾時會自動標示遲到。</p>
+              </div>
+              <span id="attendance-status-badge" class="status-badge status-pending">待操作</span>
+            </div>
+
+            <div id="attendance-settings-summary" class="attendance-summary">
+              <p>尚未載入打卡資訊。</p>
+            </div>
+
+
+            <div id="attendance-result" class="attendance-result">
+              <p>尚未有打卡結果。</p>
+            </div>
+
+          </div>
+          
+        </div>
+      </section>
+
+      <section id="page-announcement" class="page-section hidden">
+        <div class="card">
+          <h3>公告管理</h3>
+
+          <form id="announcement-form" class="form-grid">
+             <label class="field-label">
+              <span>公告標題</span>
+              <input id="announcement-title" type="text" required />
+            </label>
+            <label class="field-label">
+              <span>公告內容</span>
+              <textarea id="announcement-content" required></textarea>
+            </label>
+            <button type="submit" class="primary-btn">新增公告</button>
+          </form>
+
+          <div id="announcement-edit-box" class="edit-box hidden">
+            <h4>編輯公告</h4>
+            <form id="announcement-edit-form" class="form-grid">
+              <label class="field-label">
+                <span>公告標題</span>
+                <input id="announcement-edit-title" type="text" required />
+              </label>
+              <label class="field-label">
+                <span>公告內容</span>
+                <textarea id="announcement-edit-content" required></textarea>
+              </label>
+              <div class="item-actions">
+                <button type="submit" class="primary-btn">儲存修改</button>
+                <button type="button" id="announcement-cancel-edit" class="small-btn cancel-btn">取消編輯</button>
+              </div>
+            </form>
+          </div>
+
+          <div id="announcement-list" class="list-wrap"></div>
+        </div>
+      </section>
+
+      <section id="page-roster" class="page-section hidden">
+        <div class="card">
+          <div class="section-header-row">
+            <h3>排程表</h3>
+            <button id="open-schedule-create-btn" type="button" class="primary-btn">+ 新增</button>
+          </div>
+          <div class="schedule-filter">
+            <select id="filter-region"></select>
+            <select id="filter-department"></select>
+            <select id="filter-employee"></select>
+            <select id="filter-shift">
+              <option value="">全部班別</option>
+              <option value="全部班別">全部班別</option>
+              <option value="早班">早班</option>
+              <option value="晚班">晚班</option>
+            </select>
+          </div>
+          <p class="helper-text">排程資料會儲存到 Firebase，重新整理後仍會保留。</p>
+          <div class="calendar-wrap">
+            <div class="calendar-toolbar">
+              <button type="button" id="roster-prev-month" class="small-btn">上個月</button>
+              <h4 id="roster-calendar-title"></h4>
+              <button type="button" id="roster-next-month" class="small-btn">下個月</button>
+            </div>
+            <div class="calendar-weekdays">
+              <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+            </div>
+            <div id="calendar-grid" class="calendar-grid"></div>
+          </div>
+          <div id="roster-list" class="list-wrap"></div>
+        </div>
+      </section>
+
+      <section id="page-today-staff" class="page-section hidden">
+        <div class="card">
+          <h3>當日上班人員</h3>
+          <div id="today-working-staff-list" class="list-wrap"></div>
+        </div>
+      </section>
+      
+      <section id="page-staff" class="page-section hidden">
+        <div class="content-grid staff-grid">
+         <div id="employee-form-card" class="card">
+            <h3>新增員工</h3>
+            <form id="employee-form" class="form-grid employee-form">
+              <div class="form-section">
+                <h4>基本資料</h4>
+                <div class="two-column-grid">
+                  <label class="field-label"><span>員工代號</span><input id="employee-form-id" type="text" required /></label>
+                  <label class="field-label"><span>帳號</span><input id="employee-form-account" type="text" /></label>
+                  <label class="field-label"><span>姓名</span><input id="employee-form-name" type="text" required /></label>
+                  <label class="field-label"><span>密碼</span><input id="employee-form-password" type="password" required /></label>
+                  <label class="field-label"><span>部門</span><select id="employee-form-department" required></select></label>
+                  <label class="field-label"><span>地區</span><select id="employee-form-region" required></select></label>
+                  <label class="field-label"><span>職稱</span><input id="employee-form-title" type="text" /></label>
+                  <label class="field-label"><span>類別</span><input id="employee-form-category" type="text" /></label>
+                  <label class="field-label email-field"><span>Email</span><div class="email-input-wrap"><input id="employee-form-email-prefix" type="text" /><span class="input-suffix">@goldbricks.com.tw</span></div></label>
+                  <label class="field-label">
+                    <span>員工照片</span>
+                    <div id="photo-zone">
+                      <input id="photo-file" type="file" accept="image/*" />
+                      <img id="photo-preview" class="employee-photo-preview hidden" style="max-width:200px; display:none;" alt="員工照片預覽" />
+                    </div>
+                  </label>
+                  <label class="field-label"><span>電話</span><input id="employee-form-phone" type="tel" /></label>
+                  <label class="field-label"><span>生日 (MM/DD)</span><input id="employee-form-birthday" type="text" /></label>
+                  <label class="field-label"><span>年度特休天數</span><input id="employee-form-annual-leave-days" type="number" min="0" /></label>
+                  <label class="field-label"><span>年度特休天數期限</span><input id="employee-form-annual-leave-expiry" type="date" /></label>
+                  <label class="field-label"><span>旅遊假</span><input id="employee-form-travel-leave-days" type="number" min="0" /></label>
+                  <label class="field-label"><span>旅遊假期限</span><input id="employee-form-travel-leave-expiry" type="date" /></label>
+                </div>
+              </div>
+              <button id="employee-submit-btn" type="submit" class="primary-btn">新增員工</button>
+            </form>
+          </div>
+
+          <div class="card staff-list-card">
+            <div class="section-header-row">
+              <div>
+                <h3>員工列表</h3>
+                <p class="helper-text">右側顯示已建置的員工資料；可在每位員工的「權限」按鈕調整所有權限功能。</p>
+              </div>
+            </div>
+            <div id="employee-list" class="list-wrap"></div>
+          </div>
+        </div>
+      </section>
+      
+      <div id="permission-editor-backdrop" class="schedule-popover-backdrop hidden">
+        <div id="permission-editor-modal" class="schedule-popover permission-editor-modal" role="dialog" aria-modal="true" aria-labelledby="permission-editor-title">
+          <div class="schedule-popover-header">
+            <h4 id="permission-editor-title">編輯權限</h4>
+            <button id="permission-editor-close-btn" type="button" class="small-btn">關閉</button>
+          </div>
+          <p id="permission-editor-target" class="helper-text"></p>
+          <form id="permission-editor-form" class="permission-editor-form">
+          <details class="permission-editor-section">
+              <summary><span>【公告欄】</span></summary>
+              <label class="field-label checkbox-inline"><span>隱藏</span><input id="perm-announcement-hide" type="checkbox" /></label>
+              <label class="field-label checkbox-inline"><span>編輯</span><input id="perm-announcement-edit" type="checkbox" /></label>
+              <label class="field-label checkbox-inline"><span>刪除</span><input id="perm-announcement-delete" type="checkbox" /></label>
+           </details>
+            <details class="permission-editor-section">
+              <summary><span>【休假表】</span></summary>
+              <label class="field-label checkbox-inline"><span>早班</span><input id="perm-shift-morning" type="checkbox" /></label>
+              <label class="field-label checkbox-inline"><span>晚班</span><input id="perm-shift-evening" type="checkbox" /></label>
+              <label class="field-label checkbox-inline"><span>週休二日 &amp; 國定假日</span><input id="perm-weekends-off" type="checkbox" /></label>
+              <label class="field-label checkbox-inline"><span>休假表顯示</span><input id="perm-show-on-leave-board" type="checkbox" /></label>
+            </details>
+            <details class="permission-editor-section">
+              <summary><span>【排程表】</span></summary>
+              <p class="helper-text">地區與部門的排程皆可互相查看；請勾選此人員可編輯的排程部門，未勾選則僅能查看不能編輯。</p>
+              <div class="field-label">
+                <span>可編輯地區 / 部門</span>
+                <div id="perm-schedule-edit-region-departments" class="scope-region-department-list" role="group" aria-label="權限編輯可編輯排程地區與部門"></div>
+              </div>
+            </details>
+            <details class="permission-editor-section">
+              <summary><span>【當日上班人員】</span></summary>
+              <p class="helper-text">目前無額外設定。</p>
+            </details>
+            <details class="permission-editor-section">
+              <summary><span>【人員資訊】</span></summary>
+              <label class="field-label checkbox-inline"><span>建置基本資料</span><input id="perm-employee-profile-manage" type="checkbox" /></label>
+            </details>
+            <details class="permission-editor-section">
+              <summary><span>【權限功能】</span></summary>
+              <label class="field-label checkbox-inline"><span>左側列表顯示</span><input id="perm-permissions-list-visible" type="checkbox" /></label>
+            </details>
+            <details class="permission-editor-section">
+              <summary><span>【班別設定】</span></summary>
+              <label class="field-label checkbox-inline"><span>左側列表顯示</span><input id="perm-shift-settings-list-visible" type="checkbox" /></label>
+            </details>
+            <details class="permission-editor-section">
+              <summary><span>【本月統計】</span></summary>
+              <label class="field-label checkbox-inline"><span>左側列表顯示</span><input id="perm-monthly-summary-list-visible" type="checkbox" /></label>
+           </details>
+            <details class="permission-editor-section">
+              <summary><span>【請假申請】</span></summary>
+              <label class="field-label checkbox-inline"><span>審核假別</span><input id="perm-leave-approve" type="checkbox" /></label>
+              <div id="permission-leave-approve-scope-box" class="scope-box hidden">
+                <div class="field-label">
+                <span>可審核地區 / 部門</span>
+                  <div id="perm-manage-region-departments" class="scope-region-department-list" role="group" aria-label="權限編輯可審核地區與部門"></div>
+                </div>
+              </div>
+           </details>
+            <details class="permission-editor-section">
+              <summary><span>【打卡紀錄】</span></summary>
+              <label class="field-label checkbox-inline"><span>左側列表顯示</span><input id="perm-attendance-list-visible" type="checkbox" /></label>
+            </details>
+            <details class="permission-editor-section">
+              <summary><span>【打卡座標】</span></summary>
+              <label class="field-label checkbox-inline"><span>左側列表顯示</span><input id="perm-coordinate-list-visible" type="checkbox" /></label>
+            </details>
+            <div class="item-actions">
+              <button type="submit" class="primary-btn">儲存權限</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <section id="page-leave" class="page-section hidden">
+        <div class="card">
+          <h3>請假管理</h3>
+
+          <div id="leave-stats" class="stats-grid"></div>
+
+          <form id="leave-form" class="leave-form-row">
+            <select id="leave-type" required>
+              <option value="特休">特休</option>
+              <option value="病假">病假</option>
+              <option value="事假">事假</option>
+            </select>
+            <input id="leave-start" type="date" required />
+            <input id="leave-end" type="date" required />
+            <textarea id="leave-reason" placeholder="請假原因" required></textarea>
+            <button type="submit" class="primary-btn">送出請假申請</button>
+          </form>
+
+          <div id="leave-list" class="list-wrap"></div>
+        </div>
+      </section>
+
+      <section id="page-monthly-summary" class="page-section hidden">
+        <div class="card">
+          <div class="section-header-row">
+            <div>
+              <h3>本月統計</h3>
+              <p class="helper-text">統計休假表與請假申請總和，可查看各地區／部門／人員與剩餘假別。</p>
+            </div>
+          </div>
+          <div class="monthly-summary-toolbar">
+            <label class="field-label">
+              <span>月份</span>
+              <input id="monthly-summary-month" type="month" />
+            </label>
+            <label class="field-label">
+              <span>地區</span>
+              <select id="monthly-summary-region"></select>
+            </label>
+            <label class="field-label">
+              <span>部門</span>
+              <select id="monthly-summary-department"></select>
+            </label>
+            <label class="field-label">
+              <span>人員</span>
+              <select id="monthly-summary-employee"></select>
+            </label>
+          </div>
+          <div id="monthly-summary-cards" class="stats-grid"></div>
+          <div id="monthly-summary-table" class="list-wrap"></div>
+        </div>
+      </section>
+
+      
+      <section id="page-coordinates" class="page-section hidden">
+        <div class="card">
+          <div class="section-header-row">
+            <div>
+              <h3>打卡座標</h3>
+              <p class="helper-text">依地區管理內部座標與工作店家座標，支援新增、編輯、隱藏與刪除。</p>
+            </div>
+          </div>
+
+          <div id="coordinate-admin-disabled" class="attendance-result hidden">
+            <p>你目前沒有座標管理權限。</p>
+          </div>
+
+          <div id="coordinate-editor-card" class="edit-box hidden">
+            <h4 id="coordinate-editor-title">新增打卡座標</h4>
+            <form id="coordinate-form" class="form-grid">
+              <div class="two-column-grid">
+                <label class="field-label">
+                  <span>地區 region</span>
+                  <select id="coordinate-region" required></select>
+                </label>
+                <label class="field-label">
+                  <span>類型 category</span>
+                  <select id="coordinate-category" required>
+                    <option value="office">區域固定點</option>
+                    <option value="customer">工作店家</option>
+                  </select>
+                </label>
+                <label class="field-label">
+                  <span>名稱 name</span>
+                  <input id="coordinate-name" type="text" required />
+                </label>
+                <label class="field-label">
+                  <span>打卡半徑 radiusMeters</span>
+                  <input id="coordinate-radius" type="number" min="1" required />
+                </label>
+                <label class="field-label">
+                  <span>緯度 lat</span>
+                  <input id="coordinate-lat" type="number" step="any" required />
+                </label>
+                <label class="field-label">
+                  <span>經度 lng</span>
+                  <input id="coordinate-lng" type="number" step="any" required />
+                </label>
+              </div>
+              <label class="field-label checkbox-inline">
+                <span>啟用 isActive</span>
+                <input id="coordinate-is-active" type="checkbox" checked />
+              </label>
+              <div class="item-actions">
+                <button type="submit" class="primary-btn">儲存座標</button>
+                <button type="button" id="coordinate-cancel-btn" class="small-btn cancel-btn">取消</button>
+              </div>
+            </form>
+          </div>
+
+          <div id="coordinate-region-list" class="coordinate-region-list"></div>
+        </div>
+      </section>
+
+      <section id="page-shift-settings" class="page-section hidden">
+        <div class="content-grid staff-grid">
+          <div class="card">
+            <h3>班別設定</h3>
+            <p class="helper-text">管理員可設定上班、下班、提醒與最後打卡寬限時間。</p>
+            <form id="shift-settings-form" class="form-grid">
+              <div class="two-column-grid">
+                <label class="field-label"><span>設定層級</span><select id="shift-scope"><option value="template">部門預設</option><option value="employee">員工覆蓋</option></select></label>
+                <label class="field-label"><span>班別</span><select id="shift-code" required></select></label>
+                <label class="field-label"><span>地區</span><select id="shift-region" required></select></label>
+                <label class="field-label"><span>部門</span><select id="shift-department" required></select></label>
+                <label class="field-label"><span>員工</span><select id="shift-employee"></select></label>
+              </div>
+              <div class="two-column-grid">
+                <label class="field-label"><span>班別名稱</span><input id="shift-name" type="text" placeholder="選擇班別" required /></label>
+                <label class="field-label"><span>提醒時間</span><input id="shift-reminder-time" type="time" placeholder="選擇時間" required /></label>
+                <label class="field-label"><span>上班時間</span><input id="shift-start-time" type="time" placeholder="選擇時間" required /></label>
+                <label class="field-label"><span>下班時間</span><input id="shift-end-time" type="time" placeholder="選擇時間" required /></label>
+                <label class="field-label"><span>寬限分鐘數</span><input id="shift-grace-minutes" type="number" min="0" placeholder="設置分鐘" required /></label>
+                <label class="field-label checkbox-inline"><span>啟用班別</span><input id="shift-is-active" type="checkbox" checked /></label>
+              </div>
+              <button type="submit" class="primary-btn">儲存班別設定</button>
+            </form>
+          </div>
+          <div class="card">
+            <div class="section-header-row">
+              <div>
+                <h3>目前班別規則</h3>
+                <p class="helper-text">每筆班別會同步提供首頁打卡判定與站內提醒。</p>
+              </div>
+              <button type="button" id="shift-rules-reset-btn" class="small-btn danger-btn">清空所有班別規則時間</button>
+            </div>
+            <div id="shift-settings-list" class="list-wrap"></div>
+          </div>
+        </div>
+      </section>
+      
+      <section id="page-attendance" class="page-section hidden">
+        <div class="card">
+          <div class="section-header-row">
+            <div>
+              <h3>打卡紀錄</h3>
+              <p class="helper-text">可依員工與日期查看每日上下班與工時。</p>
+            </div>
+          </div>
+
+                   <div class="form-section">
+            <div class="two-column-grid">
+              <label class="field-label">
+                <span>員工姓名</span>
+                <input id="attendance-filter-name" type="text" placeholder="輸入姓名，可留空" />
+              </label>
+
+              <label class="field-label">
+                <span>日期</span>
+                <input id="attendance-filter-date" type="date" />
+              </label>
+            </div>
+
+            <div class="item-actions" style="margin-top: 14px;">
+              <button id="attendance-filter-btn" type="button" class="primary-btn">查詢</button>
+              <button id="attendance-filter-reset-btn" type="button" class="small-btn">清除條件</button>
+            </div>
+          </div>
+          
+          <div id="attendance-summary-list" class="list-wrap" style="margin-top: 20px;"></div>
+        </div>
+      </section>
+
+      <section id="page-schedule" class="page-section hidden">
+      <div class="card leave-board-card">
+          <div class="leave-board-header">
+            <div class="leave-top-cards">
+              <div class="leave-top-card leave-month-card">
+                <div class="leave-top-card-main leave-month-toolbar">
+                  <button type="button" id="prev-month" class="small-btn">上個月</button>
+                  <h4 id="calendar-title"></h4>
+                  <button type="button" id="next-month" class="small-btn">下個月</button>
+                </div>
+              </div>
+              <div id="leave-total-rest-card" class="leave-inline-summary-item leave-editable-summary leave-top-card leave-total-rest-header-card">
+                <h4>本月可排休天數</h4>
+               <div class="leave-top-card-main">
+                  <p id="leave-total-rest-days">-</p>
+                  <button type="button" id="leave-total-rest-edit-btn" class="small-btn leave-summary-edit-btn hidden">編輯</button>
+                </div>
+                <div id="leave-total-rest-editor" class="leave-summary-popover hidden">
+                  <label class="field-label"><span>本月可排休天數</span><input id="leave-total-rest-days-input" class="compact-number-input" type="number" min="0" step="1" placeholder="例如 8" /></label>
+                  <div class="item-actions">
+                    <button type="button" id="leave-total-rest-save-btn" class="primary-btn">儲存</button>
+                    <button type="button" id="leave-total-rest-close-btn" class="small-btn cancel-btn">關閉</button>
+                  </div>
+                </div>
+              </div>
+           <div id="leave-open-range-card" class="leave-inline-summary-item leave-editable-summary leave-top-card">
+                <h4>排假開放日</h4>
+               <div class="leave-top-card-main">
+                  <p id="leave-open-range">-</p>
+                  <button type="button" id="leave-open-range-edit-btn" class="small-btn leave-summary-edit-btn hidden">編輯</button>
+                </div>
+                <div id="leave-open-range-editor" class="leave-summary-popover hidden">
+                  <label class="field-label"><span>排假開放起始日</span><input id="leave-open-start-date" type="date" /></label>
+                  <label class="field-label"><span>排假截止日（可空白）</span><input id="leave-open-end-date" type="date" /></label>
+                  <div class="item-actions">
+                    <button type="button" id="leave-open-range-save-btn" class="primary-btn">儲存</button>
+                    <button type="button" id="leave-open-range-clear-btn" class="small-btn">清除</button>
+                    <button type="button" id="leave-open-range-close-btn" class="small-btn cancel-btn">關閉</button>
+                  </div>
+                </div>
+              </div>
+              <div id="leave-message-board-card" class="leave-inline-summary-item leave-editable-summary leave-message-board-card leave-top-card">
+                <h4>留言版</h4>
+                <div class="leave-top-card-main">
+                  <p id="leave-message-board-content" class="leave-message-board-content">-</p>
+                  <button type="button" id="leave-message-board-edit-btn" class="small-btn leave-summary-edit-btn hidden">編輯</button>
+                </div>
+                <div id="leave-message-board-editor" class="leave-summary-popover hidden">
+                  <label class="field-label">
+                    <span>公告 / 留言內容</span>
+                    <textarea id="leave-message-board-input" rows="4" maxlength="200" placeholder="輸入本月公告或留言"></textarea>
+                  </label>
+                  <div class="item-actions">
+                    <button type="button" id="leave-message-board-save-btn" class="primary-btn">儲存</button>
+                    <button type="button" id="leave-message-board-close-btn" class="small-btn cancel-btn">關閉</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        
+          <div class="leave-toolbar-panel">
+            <div id="leave-symbol-toolbar" class="leave-symbol-toolbar"></div>
+          </div>
+         <p id="leave-edit-hint" class="helper-text">請先選擇圖示，再點擊可編輯的格子。</p>
+
+           <div class="leave-grid-wrap">
+            <div id="leave-board-table" class="leave-board-table"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <div id="attendance-record-popover-backdrop" class="schedule-popover-backdrop hidden">
+    <div id="attendance-record-popover" class="schedule-popover attendance-record-popover">
+      <div class="schedule-popover-header">
+        <h4 id="attendance-record-popover-title">打卡記錄</h4>
+        <button id="attendance-record-popover-close" type="button" class="small-btn cancel-btn">關閉</button>
+      </div>
+      <div id="attendance-record-popover-content" class="list-wrap"></div>
+    </div>
+  </div>
+
+  <div id="schedule-modal-backdrop" class="schedule-popover-backdrop hidden">
+    <div id="schedule-modal" class="schedule-popover">
+      <div class="schedule-popover-header">
+        <h4 id="schedule-modal-title">新增排程</h4>
+        <button id="schedule-modal-close" type="button" class="small-btn cancel-btn">關閉</button>
+      </div>
+      <div class="selected-date-box">
+        <p>日期：<strong id="schedule-date-label">-</strong></p>
+      </div>
+      <div class="form-grid">
+        <label class="field-label">
+          <span>標題</span>
+          <input id="schedule-title" type="text" placeholder="標題" required />
+        </label>
+        <label class="field-label">
+          <span>內容</span>
+          <textarea id="schedule-content" placeholder="請輸入內容"></textarea>
+        </label>
+        <label class="field-label">
+          <span>地區</span>
+          <select id="schedule-region" multiple size="4"></select>
+        </label>
+        <label class="field-label">
+          <span>部門</span>
+          <select id="schedule-department" multiple size="6"></select>
+        </label>
+        <label class="field-label">
+          <span>員工</span>
+          <select id="schedule-employee" multiple size="8"></select>
+        </label>
+        <label class="field-label">
+          <span>班別</span>
+          <select id="schedule-shift" multiple size="3">
+            <option value="全部班別">全部班別</option>
+            <option value="早班">早班</option>
+            <option value="晚班">晚班</option>
+          </select>
+        </label>
+        <p class="helper-text">可按住 Ctrl / Command 多選，系統會自動建立多人通知排程。</p>
+        <button id="save-schedule" type="button" class="primary-btn">儲存</button>
+      </div>
+    </div>
+  </div>
+  
+  <div id="schedule-detail-backdrop" class="schedule-popover-backdrop hidden">
+    <div id="schedule-popover" class="schedule-popover">
+      <div class="schedule-popover-header">
+        <h4 id="schedule-detail-title">行程</h4>
+        <button id="schedule-detail-close" type="button" class="small-btn cancel-btn">關閉</button>
+      </div>
+      <div id="schedule-detail-body" class="list-wrap"></div>
+      <div class="schedule-top-actions">
+        <button id="schedule-detail-add-btn" type="button" class="primary-btn">+ 新增行程</button>
+      </div>
+    </div>
+  </div>
+  
+  <div id="change-password-backdrop" class="schedule-popover-backdrop hidden">
+    <div id="change-password-modal" class="schedule-popover">
+      <div class="schedule-popover-header">
+        <h4>變更密碼</h4>
+        <button id="change-password-close" type="button" class="small-btn cancel-btn">關閉</button>
+      </div>
+      <form id="change-password-form" class="form-grid">
+        <label class="field-label">
+          <span>目前密碼</span>
+          <input id="change-password-current" type="password" autocomplete="current-password" required />
+        </label>
+        <label class="field-label">
+          <span>新密碼</span>
+          <input id="change-password-new" type="password" autocomplete="new-password" required />
+        </label>
+        <label class="field-label">
+          <span>確認新密碼</span>
+          <input id="change-password-confirm" type="password" autocomplete="new-password" required />
+        </label>
+        <p id="change-password-error" class="error-text"></p>
+        <div class="form-actions">
+          <button type="submit" class="primary-btn">儲存新密碼</button>
+          <button id="change-password-cancel" type="button" class="secondary-btn">取消</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <script> 
+     window.__FIREBASE_CONFIG__ = window.__FIREBASE_CONFIG__ || {
+      apiKey: "AIzaSyAmPIQMfAR1BmvJbjx3L002ibVu2kXA3uM",
+      authDomain: "schedule-app-5845b.firebaseapp.com",
+      projectId: "schedule-app-5845b",
+      storageBucket: "schedule-app-5845b.firebasestorage.app",
+      messagingSenderId: "1046564647922",
+      appId: "1:1046564647922:web:965bb01618c8b6b992b16b"
+    };
+    window.__ATTENDANCE_API_URL__ = window.__ATTENDANCE_API_URL__ || "https://us-central1-schedule-app-5845b.cloudfunctions.net/submitAttendance";
+  </script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="pwa.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
